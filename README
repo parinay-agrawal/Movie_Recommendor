@@ -1,1 +1,7 @@
+#Ratings predictor
+
+1. Get database from IMDB
+2. Create suitable tables using PostGreSQL.(creator.sh)
+3. Some queries on data.
+4. Predictor predicts rating(user-user collaborative filtering) using jaccard similarity.
 
