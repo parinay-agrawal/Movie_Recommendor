@@ -1,0 +1,196 @@
+1.
+with oscar_winners as(
+	select distinct TID
+	from awards
+	where awardname in ('Oscar', 'Academy')
+), 
+	singer_list as (
+	select person.PID, name, TID
+	from othercrew
+	inner join person on person.PID = othercrew.PID
+	where role = 'Singer'
+), 
+	count_win as (
+	select PID, count(*) as awardnum
+	from singer_list
+	inner join oscar_winners on oscar_winners.TID = singer_list.TID
+	group by PID
+)
+select name, awardnum
+from count_win
+inner join person on person.PID = count_win.PID;
+
+
+2.
+with dir_info AS (
+	select PID, count(*) as num
+	from title_ratings
+	inner join director on title_ratings.TID = director.TID
+	where rating < 5 and job = 'director'
+	group by PID
+)
+select name, num
+from dir_info
+inner join person on dir_info.PID = person.PID;
+
+3)
+with dir_info AS (
+	select PID, avg(rating) as rate
+	from title_ratings
+	inner join director on title_ratings.TID = director.TID
+	inner join title_basics on title_ratings.TID = title_basics.TID
+	where type = 'movie' and job = 'director'
+	group by PID
+)
+select name, rate
+from dir_info
+inner join person on dir_info.PID = person.PID 
+order by rate desc
+limit 1;
+
+4)
+select originalname, startyear, runtimeminutes
+from(
+	select originalname, startyear, runtimeminutes,
+	rank() over(partition by startyear order by runtimeminutes) rnk
+	from title_basics
+	where type = 'movie'
+)t
+where t.rnk = 1;
+
+5.
+with movie_genre AS (
+	select title_basics.TID, originalname, genre, runtimeminutes
+	from title_basics
+	inner join title_genre on title_basics.TID = title_genre.TID
+	where type = 'movie'
+)
+select genre, originalname, runtimeminutes
+from(
+	select originalname, genre, runtimeminutes,
+	rank() over(partition by genre order by runtimeminutes desc) rnk
+	from movie_genre
+)t
+where t.rnk = 1;
+
+6)
+select originalname, type, rating
+from(
+	select originalname, type, rating,
+	rank() over(partition by type order by rating desc) rnk
+	from title_basics
+	inner join title_ratings on title_ratings.TID = title_basics.TID
+	where certificate = 'A' and type in ('movie', 'TVseries')
+)t
+where t.rnk = 1;
+
+7)
+with movie_info as (
+	select title_basics.TID, originalname, genre, rating, type
+	from title_genre
+	inner join title_ratings on title_ratings.TID = title_genre.TID
+	inner join title_basics on title_ratings.TID = title_basics.TID
+	where type in ('movie')
+),
+	series_info as (
+	select title_basics.TID, originalname, genre, rating, type
+	from title_genre
+	inner join title_ratings on title_ratings.TID = title_genre.TID
+	inner join title_basics on title_ratings.TID = title_basics.TID
+	where type in ('TVseries')
+)
+
+select genre, originalname, type, rating
+from(
+	select genre, originalname, rating, type
+	from(
+		select genre, originalname, rating, type,
+		rank() over(partition by genre order by rating desc) rnk
+		from movie_info
+	)t
+	where t.rnk = 1
+	UNION
+	select genre, originalname, rating, type
+	from(
+		select genre, originalname, rating, type,
+		rank() over(partition by genre order by rating desc) rnk
+		from series_info
+	)p
+	where p.rnk = 1
+)q
+order by genre;
+
+8)
+with duration as(
+	select TID, originalname, endyear-startyear as dur
+	from title_basics
+	where type = 'TVseries'
+)
+select originalname, duration
+from(
+	select originalname, dur as duration,
+	rank() over(order by dur desc) rnk
+	from duration
+)t
+where t.rnk = 1;
+
+9)
+with income_info as (
+	select TID, genre, income, originalname
+	from(
+		select title_genre.TID, genre, income,originalname,
+		rank() over(partition by genre order by income desc) rnk
+		from title_genre
+		inner join title_earning on title_genre.TID = title_earning.TID
+		inner join title_basics on title_basics.TID = title_genre.TID
+		where type = 'movie'
+	)t
+	where t.rnk = 1
+)
+select name, genre, income,originalname
+from awards
+inner join income_info on awards.TID=income_info.TID
+inner join person on awards.PID = person.PID;
+
+10)
+with asst_directors as (
+	select PID, director.TID, startyear
+	from director
+	inner join title_basics on title_basics.TID = director.TID
+	where job='assistant director' and type = 'movie'
+),	high_worker as (
+	select PID
+	from asst_directors
+	group by PID
+	having max(startyear)-min(startyear) >= 5
+)
+select distinct name
+from high_worker 
+inner join director on director.PID = high_worker.PID
+inner join awards on awards.TID = director.TID
+inner join person on person.PID = high_worker.PID
+where awardname in ('Oscar', 'Academy') and job = 'assistant director';
+
+14)
+
+
+20)
+with experience as (
+	select PID, count(*) as exp
+	from director
+	where job in ('director', 'assistant director')
+	group by PID
+),
+avg_rating as (
+	select PID, avg(rating) as rate
+	from title_ratings
+	inner join director on title_ratings.TID = director.TID
+	inner join title_basics on title_ratings.TID = title_basics.TID
+	where type = 'movie' and job in ('director', 'assistant director')
+	group by PID
+)
+select name, (0.2*exp + 0.8*rate) as score
+from experience
+inner join avg_rating on avg_rating.PID = experience.PID
+inner join person on experience.PID = person.PID
+order by score desc;
